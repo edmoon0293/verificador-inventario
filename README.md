@@ -1,0 +1,2 @@
+# verificador-inventario
+verificador-inventario
