@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Inventario</title>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --ink: #1a1d29;
@@ -248,10 +249,12 @@
 </div>
 
 <div class="bottombar">
-  <div class="wrap-bb">
-    <button class="btn-ghost" style="width:100%" onclick="openModal()">+ Agregar producto</button>
+  <div class="wrap-bb" style="display:flex;gap:10px">
+    <button class="btn-ghost" style="flex:1" onclick="openModal()">+ Agregar</button>
+    <button class="btn-ghost" style="flex:1" onclick="document.getElementById('fileInput').click()">↑ Importar archivo</button>
   </div>
 </div>
+<input type="file" id="fileInput" accept=".csv,.txt,.xlsx,.xls" style="display:none" onchange="handleFile(event)">
 
 <!-- Modal producto -->
 <div class="modal-bg" id="modalBg">
@@ -295,6 +298,25 @@
     <div class="modal-actions">
       <button class="btn-ghost" onclick="closeCred()">Cancelar</button>
       <button class="btn-secondary" onclick="saveCred()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal importar -->
+<div class="modal-bg" id="importBg">
+  <div class="modal">
+    <h2>Vista previa de importación</h2>
+    <div class="sub" id="importSummary"></div>
+    <div id="importPreview" style="max-height:240px;overflow-y:auto;border:1px solid var(--line);border-radius:12px;background:#fff;margin-bottom:8px"></div>
+    <div class="field" style="margin-top:14px">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:500">
+        <input type="checkbox" id="updateExisting" checked style="width:auto;transform:scale(1.3)">
+        Actualizar productos que ya existen (mismo código)
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeImport()">Cancelar</button>
+      <button class="btn-secondary" onclick="confirmImport()">Importar</button>
     </div>
   </div>
 </div>
@@ -586,6 +608,150 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+
+/* ---------- Importación masiva ---------- */
+let pendingImport = [];
+
+function handleFile(event) {
+  if (!isStaff) { toast('Necesitas acceso de empleado'); event.target.value = ''; return; }
+  const file = event.target.files[0];
+  if (!file) return;
+  const name = file.name.toLowerCase();
+  const reader = new FileReader();
+
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        parseRows(rows);
+      } catch (err) { toast('Error al leer el Excel'); }
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.onload = (e) => {
+      try {
+        const rows = parseDelimited(e.target.result);
+        parseRows(rows);
+      } catch (err) { toast('Error al leer el archivo'); }
+    };
+    reader.readAsText(file, 'UTF-8');
+  }
+  event.target.value = '';
+}
+
+function parseDelimited(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+  if (lines.length === 0) return [];
+  const first = lines[0];
+  let sep = ',';
+  if (first.split(';').length > first.split(',').length) sep = ';';
+  if (first.split('\t').length > first.split(sep).length) sep = '\t';
+  return lines.map(line => splitLine(line, sep));
+}
+
+function splitLine(line, sep) {
+  const out = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === sep && !inQ) {
+      out.push(cur); cur = '';
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+
+function parseRows(rows) {
+  if (!rows || rows.length === 0) { toast('El archivo está vacío'); return; }
+  const header = rows[0].map(c => String(c).toLowerCase().trim());
+  const keywords = ['nombre','name','titulo','título','title','precio','price','codigo','código','code','barras','barcode'];
+  const hasHeader = header.some(h => keywords.includes(h));
+
+  let col = { name: 0, title: 1, price: 2, code: 3 };
+  let dataRows = rows;
+  if (hasHeader) {
+    col = { name: -1, title: -1, price: -1, code: -1 };
+    header.forEach((h, i) => {
+      if (['nombre','name'].includes(h)) col.name = i;
+      else if (['titulo','título','title','descripcion','descripción'].includes(h)) col.title = i;
+      else if (['precio','price'].includes(h)) col.price = i;
+      else if (['codigo','código','code','barras','barcode'].includes(h)) col.code = i;
+    });
+    dataRows = rows.slice(1);
+    if (col.name === -1) col = { name: 0, title: 1, price: 2, code: 3 };
+  }
+
+  const parsed = [];
+  dataRows.forEach(r => {
+    const name = (r[col.name] !== undefined ? String(r[col.name]) : '').trim();
+    if (!name) return;
+    const title = col.title >= 0 && r[col.title] !== undefined ? String(r[col.title]).trim() : '';
+    const price = col.price >= 0 && r[col.price] !== undefined ? String(r[col.price]).trim() : '';
+    const code = col.code >= 0 && r[col.code] !== undefined ? String(r[col.code]).trim() : '';
+    parsed.push({ name, title, price, code });
+  });
+
+  if (parsed.length === 0) { toast('No se encontraron productos válidos'); return; }
+  pendingImport = parsed;
+  showImportPreview();
+}
+
+function showImportPreview() {
+  let nuevos = 0, actualizar = 0;
+  pendingImport.forEach(p => {
+    const exists = p.code && products.find(x => x.code === p.code);
+    if (exists) actualizar++; else nuevos++;
+  });
+  document.getElementById('importSummary').innerHTML =
+    '<b>' + pendingImport.length + '</b> productos en el archivo · ' +
+    '<span style="color:var(--green)">' + nuevos + ' nuevos</span> · ' +
+    '<span style="color:var(--amber)">' + actualizar + ' ya existen</span>';
+
+  const preview = pendingImport.slice(0, 50).map(p =>
+    '<div style="padding:10px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:10px">' +
+      '<div style="min-width:0"><div style="font-weight:600;font-size:14px">' + escapeHtml(p.name) + '</div>' +
+      '<div style="font-size:11px;color:var(--muted)">' + escapeHtml(p.code || 'sin código') + '</div></div>' +
+      '<div style="font-weight:700;white-space:nowrap">' + money(p.price) + '</div>' +
+    '</div>'
+  ).join('');
+  document.getElementById('importPreview').innerHTML = preview +
+    (pendingImport.length > 50 ? '<div style="padding:10px;text-align:center;color:var(--muted);font-size:12px">… y ' + (pendingImport.length - 50) + ' más</div>' : '');
+  document.getElementById('importBg').classList.add('show');
+}
+
+function closeImport() {
+  document.getElementById('importBg').classList.remove('show');
+  pendingImport = [];
+}
+
+function confirmImport() {
+  const updateExisting = document.getElementById('updateExisting').checked;
+  let added = 0, updated = 0, skipped = 0;
+  pendingImport.forEach(p => {
+    const existing = p.code ? products.find(x => x.code === p.code) : null;
+    if (existing) {
+      if (updateExisting) {
+        existing.name = p.name;
+        if (p.title) existing.title = p.title;
+        if (p.price) existing.price = p.price;
+        updated++;
+      } else skipped++;
+    } else {
+      products.push({ id: uid(), name: p.name, title: p.title, price: p.price, code: p.code });
+      added++;
+    }
+  });
+  save(); render(); closeImport();
+  toast(added + ' agregados, ' + updated + ' actualizados' + (skipped ? ', ' + skipped + ' omitidos' : ''));
+}
+
 render();
 </script>
 </body>
