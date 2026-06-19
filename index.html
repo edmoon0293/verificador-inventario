@@ -788,18 +788,48 @@ function deleteProduct() {
 }
 
 /* ---------- Render ---------- */
+// Normaliza texto: minúsculas y sin acentos, para búsqueda flexible
+function normalize(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, ''); // quita acentos
+}
+
 function render() {
   const list = document.getElementById('list');
-  const q = document.getElementById('search').value.trim().toLowerCase();
+  const rawQ = document.getElementById('search').value.trim();
+  const q = normalize(rawQ);
   document.getElementById('count').textContent = products.length;
+
   let items = products;
   if (q) {
-    items = products.filter(p =>
-      p.name.toLowerCase().includes(q) ||
-      (p.title || '').toLowerCase().includes(q) ||
-      (p.code || '').includes(q)
-    );
+    // Dividir la búsqueda en palabras: todas deben aparecer en algún campo
+    const words = q.split(/\s+/).filter(Boolean);
+    const scored = [];
+    products.forEach(p => {
+      const name = normalize(p.name);
+      const title = normalize(p.title);
+      const code = normalize(p.code);
+      const haystack = name + ' ' + title + ' ' + code;
+      // Cada palabra buscada debe estar contenida en algún campo
+      const allMatch = words.every(w => haystack.includes(w));
+      if (!allMatch) return;
+      // Puntaje de relevancia: nombre que empieza con la búsqueda > contiene > título > código
+      let score = 0;
+      if (name.startsWith(q)) score += 100;
+      if (name.includes(q)) score += 50;
+      words.forEach(w => {
+        if (name.includes(w)) score += 10;
+        if (title.includes(w)) score += 5;
+        if (code.includes(w)) score += 3;
+      });
+      scored.push({ p, score });
+    });
+    scored.sort((a, b) => b.score - a.score);
+    items = scored.map(s => s.p);
   }
+
   let extra = '';
   if (isStaff) {
     extra = '<div style="text-align:center;margin-top:18px"><button class="btn-ghost" style="display:inline-block;width:auto;padding:10px 18px" onclick="openCred()">Cambiar usuario y contraseña</button></div>';
@@ -808,11 +838,19 @@ function render() {
     list.innerHTML = '<div class="empty">' +
       (products.length === 0
         ? 'Aún no hay productos.<br>' + (isStaff ? 'Escanea o agrega productos.' : 'Pide a un empleado que cargue el inventario.')
-        : 'Sin resultados para "' + escapeHtml(q) + '"') +
+        : 'Sin resultados para "' + escapeHtml(rawQ) + '"') +
       '</div>' + extra;
     return;
   }
-  list.innerHTML = items.map(p =>
+
+  // Encabezado con la cantidad de resultados cuando hay búsqueda
+  let resultHeader = '';
+  if (q) {
+    resultHeader = '<div style="font-size:13px;color:var(--muted);margin:0 4px 10px">' +
+      items.length + (items.length === 1 ? ' resultado' : ' resultados') + ' para "' + escapeHtml(rawQ) + '"</div>';
+  }
+
+  list.innerHTML = resultHeader + items.map(p =>
     '<div class="product">' +
       '<div class="product-info">' +
         '<div class="product-name">' + escapeHtml(p.name) + '</div>' +
