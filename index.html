@@ -8,17 +8,18 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
-    --ink: #1a1d29;
-    --paper: #fbfaf7;
-    --line: #e4e0d6;
-    --accent: #ff5a36;
-    --accent-dark: #d8401f;
+    --ink: #76787a;          /* gris institucional (header / barras) */
+    --ink-dark: #5f6163;     /* gris más oscuro para contraste */
+    --paper: #f7f6f4;        /* fondo claro */
+    --line: #e0ddd7;
+    --accent: #ba0c2f;       /* rojo/vino del logo */
+    --accent-dark: #91091f;
     --green: #1f9d61;
     --green-bg: #e7f6ee;
     --amber: #e8a33d;
     --muted: #8a8578;
     --card: #ffffff;
-    --lock: #3a6ea5;
+    --lock: #ba0c2f;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -42,6 +43,12 @@
   }
   header .ht { display: flex; align-items: center; gap: 10px; }
   header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+  .logo {
+    height: 34px;
+    width: auto;
+    /* el logo es gris/rojo; lo volvemos blanco para que resalte sobre el header gris */
+    filter: brightness(0) invert(1);
+  }
   header .count { font-size: 13px; color: #b8b3a6; font-weight: 500; }
   .lock-btn {
     background: rgba(255,255,255,0.12);
@@ -203,7 +210,7 @@
 <body>
 <header>
   <div class="ht">
-    <h1>Inventario</h1>
+    <img src="logo.svg" alt="LCF" class="logo" onerror="this.style.display='none'">
     <span class="mode-badge" id="modeBadge">Consulta</span>
   </div>
   <div class="ht">
