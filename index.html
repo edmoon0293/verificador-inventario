@@ -89,6 +89,61 @@
     overflow: hidden;
     margin-bottom: 16px;
   }
+  .scan-mode {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .mode-tab {
+    flex: 1;
+    background: #fff;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    padding: 11px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .mode-tab.active {
+    background: var(--ink);
+    color: #fff;
+    border-color: var(--ink);
+  }
+  .physical-box {
+    padding: 28px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .physical-dot {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 0 0 rgba(31,157,97,0.5);
+    animation: pulse 1.8s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(31,157,97,0.5); }
+    70% { box-shadow: 0 0 0 12px rgba(31,157,97,0); }
+    100% { box-shadow: 0 0 0 0 rgba(31,157,97,0); }
+  }
+  #scanInput {
+    width: 100%;
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    padding: 14px;
+    border: 2px dashed var(--line);
+    border-radius: 12px;
+    font-family: inherit;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 1px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  #scanInput:focus { outline: none; border-color: var(--green); border-style: solid; }
+  .physical-hint { font-size: 13px; color: var(--muted); }
   #video-container {
     position: relative;
     width: 100%;
@@ -229,18 +284,37 @@
 </header>
 
 <div class="wrap">
+  <div class="scan-mode">
+    <button class="mode-tab active" id="tabPhysical" onclick="setScanMode('physical')">⌨ Escáner físico</button>
+    <button class="mode-tab" id="tabCamera" onclick="setScanMode('camera')">📷 Cámara</button>
+  </div>
+
   <div class="scan-card">
-    <div id="video-container">
-      <video id="video" playsinline></video>
-      <div class="scan-overlay"><div class="scan-box"></div></div>
-      <div class="scan-line"></div>
+    <!-- Modo escáner físico -->
+    <div id="physical-mode">
+      <div class="physical-box">
+        <div class="physical-dot" id="physicalDot"></div>
+        <input type="text" id="scanInput" autocomplete="off" autocorrect="off" autocapitalize="off"
+               placeholder="Esperando escaneo…" inputmode="none">
+        <span class="physical-hint">Escanea un código con tu lector</span>
+      </div>
     </div>
-    <div class="scan-placeholder" id="placeholder">
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#8a8578" stroke-width="1.5">
-        <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9v6M10 9v6M13 9v6M16 9v6"/>
-      </svg>
-      <p>Toca "Escanear" para leer un código<br>y ver el precio del producto</p>
+
+    <!-- Modo cámara -->
+    <div id="camera-mode" style="display:none">
+      <div id="video-container">
+        <video id="video" playsinline></video>
+        <div class="scan-overlay"><div class="scan-box"></div></div>
+        <div class="scan-line"></div>
+      </div>
+      <div class="scan-placeholder" id="placeholder">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#8a8578" stroke-width="1.5">
+          <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9v6M10 9v6M13 9v6M16 9v6"/>
+        </svg>
+        <p>Toca "Escanear" para leer un código<br>y ver el precio del producto</p>
+      </div>
     </div>
+
     <div class="result" id="result">
       <div class="result-code" id="r-code"></div>
       <div class="result-status" id="r-status"></div>
@@ -251,7 +325,7 @@
     </div>
   </div>
 
-  <button class="btn-primary" id="scanBtn" onclick="toggleScan()">Escanear código</button>
+  <button class="btn-primary" id="scanBtn" onclick="toggleScan()" style="display:none">Escanear código</button>
 
   <div class="section-label">Catálogo</div>
   <div class="search-bar">
@@ -440,7 +514,71 @@ function toast(msg) {
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-/* ---------- Scanner ---------- */
+/* ---------- Modo de escaneo (físico / cámara) ---------- */
+let scanMode = 'physical';
+
+function setScanMode(mode) {
+  scanMode = mode;
+  const physical = document.getElementById('physical-mode');
+  const camera = document.getElementById('camera-mode');
+  const btn = document.getElementById('scanBtn');
+  const tabP = document.getElementById('tabPhysical');
+  const tabC = document.getElementById('tabCamera');
+
+  if (mode === 'physical') {
+    physical.style.display = 'block';
+    camera.style.display = 'none';
+    btn.style.display = 'none';
+    tabP.classList.add('active');
+    tabC.classList.remove('active');
+    if (scanning) stopScan();
+    focusScanInput();
+  } else {
+    physical.style.display = 'none';
+    camera.style.display = 'block';
+    btn.style.display = 'block';
+    tabC.classList.add('active');
+    tabP.classList.remove('active');
+  }
+}
+
+function focusScanInput() {
+  const input = document.getElementById('scanInput');
+  if (scanMode === 'physical' && input) {
+    // no forzar teclado en móvil pero sí captar el lector
+    setTimeout(() => input.focus(), 50);
+  }
+}
+
+function setupPhysicalScanner() {
+  const input = document.getElementById('scanInput');
+  if (!input) return;
+
+  // Al presionar Enter (el lector lo manda al final), procesar el código
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const code = input.value.trim();
+      input.value = '';
+      if (code) {
+        if (navigator.vibrate) navigator.vibrate(80);
+        showResult(code);
+      }
+    }
+  });
+
+  // Mantener el foco en el campo mientras estamos en modo físico,
+  // salvo que el usuario esté escribiendo en otro campo (buscador, modales).
+  document.addEventListener('click', (e) => {
+    if (scanMode !== 'physical') return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    const inModal = e.target.closest('.modal-bg');
+    const isField = tag === 'input' || tag === 'textarea' || tag === 'button';
+    if (!inModal && !isField) focusScanInput();
+  });
+}
+
+/* ---------- Scanner (cámara) ---------- */
 async function toggleScan() {
   if (scanning) { stopScan(); return; }
   startScan();
@@ -492,13 +630,16 @@ function showResult(code) {
   const found = products.find(p => p.code === code);
   result.classList.add('show');
   document.getElementById('r-code').textContent = 'Código: ' + code;
+  const againBtn = scanMode === 'physical'
+    ? '<button class="btn-secondary" onclick="scanAgain()">Escanear otro</button>'
+    : '<button class="btn-secondary" onclick="startScan()">Escanear otro</button>';
   if (found) {
     result.className = 'result show found';
     document.getElementById('r-status').textContent = '✓ Producto encontrado';
     document.getElementById('r-name').textContent = found.name;
     document.getElementById('r-title').textContent = found.title || '';
     document.getElementById('r-price').textContent = money(found.price);
-    let actions = '<button class="btn-secondary" onclick="startScan()">Escanear otro</button>';
+    let actions = againBtn;
     if (isStaff) {
       actions = '<button class="btn-ghost" onclick="openModal(\'' + found.id + '\')">Editar</button>' + actions;
     }
@@ -513,10 +654,16 @@ function showResult(code) {
       document.getElementById('r-actions').innerHTML =
         '<button class="btn-secondary" onclick="openModal(null, \'' + code + '\')">Agregar este producto</button>';
     } else {
-      document.getElementById('r-actions').innerHTML =
-        '<button class="btn-secondary" onclick="startScan()">Escanear otro</button>';
+      document.getElementById('r-actions').innerHTML = againBtn;
     }
   }
+  // En modo físico, dejar el campo listo para el siguiente escaneo
+  if (scanMode === 'physical') focusScanInput();
+}
+
+function scanAgain() {
+  document.getElementById('result').classList.remove('show');
+  focusScanInput();
 }
 
 /* ---------- CRUD (solo empleado) ---------- */
@@ -765,6 +912,8 @@ function confirmImport() {
 }
 
 render();
+setupPhysicalScanner();
+setScanMode('physical');
 </script>
 </body>
 </html>
