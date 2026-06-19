@@ -227,6 +227,32 @@
   .product-name { font-size: 16px; font-weight: 700; }
   .product-title { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .product-code { font-size: 11px; color: #b5b0a3; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .product-location { font-size: 12px; color: var(--accent); font-weight: 600; margin-top: 2px; }
+
+  /* Selector de base de datos */
+  .db-selector {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+  }
+  .db-current {
+    flex: 1; display: flex; align-items: center; gap: 8px;
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 4px 12px; color: var(--muted);
+  }
+  .db-current select {
+    flex: 1; border: none; background: transparent; font-family: inherit;
+    font-size: 15px; font-weight: 600; color: var(--ink); padding: 9px 0;
+    outline: none; -webkit-appearance: none; appearance: none;
+  }
+  .db-manage {
+    flex: none; width: 44px; height: 44px;
+    border: 1px solid var(--line); border-radius: 12px;
+    background: #fff; color: var(--ink);
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* Resultado: ubicación */
+  .result-location { font-size: 15px; color: var(--accent); font-weight: 600; margin: 4px 0 8px; }
+  /* Campo de escáner readonly (sin teclado) */
+  #scanInput[readonly] { cursor: default; caret-color: transparent; }
   .product-price { font-size: 18px; font-weight: 800; white-space: nowrap; }
   .product-edit {
     background: var(--paper); border: 1px solid var(--line);
@@ -317,16 +343,79 @@
     opacity: 0; transition: all .25s; z-index: 200; pointer-events: none;
   }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.success { background: var(--green); }
 
   .staff-only { display: none; }
   body.staff .staff-only { display: block; }
   .login-hint { font-size: 12px; color: var(--muted); text-align: center; margin-top: 10px; line-height: 1.5; }
+
+  /* Menú hamburguesa lateral */
+  .menu-overlay {
+    position: fixed; inset: 0; background: rgba(26,29,41,0.5);
+    backdrop-filter: blur(3px); opacity: 0; pointer-events: none;
+    transition: opacity .25s; z-index: 90;
+  }
+  .menu-overlay.show { opacity: 1; pointer-events: auto; }
+  .side-menu {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: 80%; max-width: 320px;
+    background: var(--paper);
+    z-index: 95;
+    transform: translateX(-100%);
+    transition: transform .28s cubic-bezier(.2,.8,.2,1);
+    display: flex; flex-direction: column;
+    box-shadow: 2px 0 16px rgba(0,0,0,0.15);
+  }
+  .side-menu.open { transform: translateX(0); }
+  .menu-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 18px 12px;
+  }
+  .menu-title { font-size: 18px; font-weight: 700; }
+  .menu-user { padding: 0 18px 10px; }
+  .menu-user-badge {
+    font-size: 13px; font-weight: 600;
+    padding: 8px 12px; border-radius: 10px;
+    background: var(--green-bg); color: var(--green);
+  }
+  .menu-user-badge.consulta { background: #eee; color: var(--muted); }
+  .menu-items { padding: 8px 12px; overflow-y: auto; flex: 1; }
+  .menu-item {
+    display: flex; align-items: center; gap: 14px;
+    width: 100%; text-align: left;
+    padding: 14px 12px; margin-bottom: 2px;
+    background: transparent; border: none; border-radius: 12px;
+    font-size: 15px; font-weight: 600; color: var(--ink); font-family: inherit;
+  }
+  .menu-item:active { background: #ececec; }
+  .menu-item svg { color: var(--accent); flex-shrink: 0; }
+  .menu-divider {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--muted);
+    padding: 16px 12px 6px;
+  }
+  .menu-sep { height: 1px; background: var(--line); margin: 8px 12px; }
+
+  /* Filas de usuario en gestión */
+  .user-row {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid var(--line);
+    border-radius: 12px; padding: 12px 14px; margin-bottom: 8px;
+  }
+  .user-info { flex: 1; min-width: 0; }
+  .user-info .user-name { font-size: 15px; font-weight: 700; }
+  .user-info .user-meta { font-size: 12px; color: var(--muted); }
 </style>
 </head>
 <body>
 <header>
   <img src="logo.svg" alt="LCF" class="logo" onerror="this.style.display='none'">
   <div class="header-controls">
+    <button class="lock-btn" id="menuBtn" onclick="openMenu()" title="Menú" aria-label="Menú">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M3 6h18M3 12h18M3 18h18"/>
+      </svg>
+    </button>
     <span class="mode-badge" id="modeBadge">Consulta</span>
     <button class="lock-btn" id="lockBtn" onclick="toggleLock()" title="Acceso empleado">
       <svg id="lockIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -336,21 +425,45 @@
   </div>
 </header>
 
+<!-- Menú lateral (hamburguesa) -->
+<div class="menu-overlay" id="menuOverlay" onclick="closeMenu()"></div>
+<nav class="side-menu" id="sideMenu">
+  <div class="menu-header">
+    <span class="menu-title">Menú</span>
+    <button class="modal-close" onclick="closeMenu()" aria-label="Cerrar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="menu-user" id="menuUser"></div>
+  <div class="menu-items" id="menuItems"></div>
+</nav>
+
 <div class="wrap">
+  <!-- Selector de base de datos activa -->
+  <div class="db-selector">
+    <div class="db-current">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5M3 12a9 3 0 0 0 18 0"/></svg>
+      <select id="dbSelect" onchange="onDbChange(this.value)"></select>
+    </div>
+    <button class="db-manage" id="dbManageBtn" onclick="openBases()" title="Gestionar bases" style="display:none">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
+
   <div class="scan-mode">
     <button class="mode-tab active" id="tabPhysical" onclick="setScanMode('physical')">⌨ Escáner físico</button>
     <button class="mode-tab" id="tabCamera" onclick="setScanMode('camera')">📷 Cámara</button>
   </div>
 
   <div class="scan-card">
-    <!-- Modo escáner físico -->
+    <!-- Modo escáner físico (siempre activo, sin teclado) -->
     <div id="physical-mode">
       <div class="physical-box">
         <div class="physical-dot" id="physicalDot"></div>
+        <!-- readonly evita que se abra el teclado; el lector igual escribe aquí vía JS -->
         <input type="text" id="scanInput" autocomplete="off" autocorrect="off" autocapitalize="off"
-               placeholder="Escanea o escribe un código…">
-        <button class="btn-secondary" style="width:100%;flex:none" onclick="manualScanSearch()">Buscar código</button>
-        <span class="physical-hint">Escanea con tu lector, o escribe y pulsa Buscar</span>
+               readonly inputmode="none" placeholder="Listo para escanear…">
+        <span class="physical-hint" id="physicalHint">Acerca un libro al lector para escanearlo</span>
       </div>
     </div>
 
@@ -374,6 +487,7 @@
       <div class="result-status" id="r-status"></div>
       <div class="result-name" id="r-name"></div>
       <div class="result-title" id="r-title"></div>
+      <div class="result-location" id="r-location"></div>
       <div class="result-price" id="r-price"></div>
       <div class="result-actions" id="r-actions"></div>
     </div>
@@ -420,6 +534,7 @@
     <div class="field"><label>Nombre</label><input type="text" id="f-name" placeholder="Ej. El Quijote"></div>
     <div class="field"><label>Título / descripción</label><input type="text" id="f-title" placeholder="Ej. Editorial Planeta, pasta dura"></div>
     <div class="field"><label>Precio</label><input type="text" id="f-price" inputmode="decimal" placeholder="Ej. 349"></div>
+    <div class="field"><label>Ubicación en librero <span style="color:var(--muted);font-weight:400">(opcional)</span></label><input type="text" id="f-location" placeholder="Ej. Pasillo 3, estante B"></div>
     <div class="field"><label>Código de barras</label><input type="text" id="f-code" inputmode="numeric" placeholder="Escanea o escribe el código"></div>
     <div class="modal-actions">
       <button class="btn-ghost" id="deleteBtn" style="display:none" onclick="deleteProduct()">Eliminar</button>
@@ -449,22 +564,51 @@
   </div>
 </div>
 
-<!-- Modal cambiar credenciales -->
-<div class="modal-bg" id="credBg">
+<!-- Modal lista de usuarios -->
+<div class="modal-bg" id="usersBg">
   <div class="modal">
     <div class="modal-head">
-      <h2>Cambiar credenciales</h2>
-      <button class="modal-close" onclick="closeCred()" aria-label="Cerrar">
+      <h2>Usuarios empleados</h2>
+      <button class="modal-close" onclick="closeUsers()" aria-label="Cerrar">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
-    <div class="sub">Define el usuario y contraseña del empleado.</div>
-    <div class="field"><label>Nuevo usuario</label><input type="text" id="c-user" autocomplete="off"></div>
-    <div class="field"><label>Nueva contraseña</label><input type="password" id="c-pass"></div>
-    <div class="modal-actions">
-      <button class="btn-ghost" onclick="closeCred()">Cancelar</button>
-      <button class="btn-secondary" onclick="saveCred()">Guardar</button>
+    <div class="sub">Quien tenga estos datos puede entrar al modo empleado.</div>
+    <div id="usersList" style="margin-bottom:14px"></div>
+    <button class="btn-secondary" style="width:100%" onclick="openUserForm(null)">+ Crear nuevo usuario</button>
+  </div>
+</div>
+
+<!-- Modal formulario de usuario -->
+<div class="modal-bg" id="userFormBg">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="userFormTitle">Nuevo usuario</h2>
+      <button class="modal-close" onclick="closeUserForm()" aria-label="Cerrar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
     </div>
+    <div class="field"><label>Usuario</label><input type="text" id="uf-user" autocomplete="off" placeholder="Ej. juan"></div>
+    <div class="field"><label>Contraseña</label><input type="text" id="uf-pass" placeholder="Contraseña"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeUserForm()">Cancelar</button>
+      <button class="btn-secondary" onclick="saveUser()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal gestión de bases de datos -->
+<div class="modal-bg" id="basesBg">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Bases de datos</h2>
+      <button class="modal-close" onclick="closeBases()" aria-label="Cerrar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="sub">Cada base es independiente y tiene sus propios productos.</div>
+    <div id="basesList" style="margin-bottom:14px"></div>
+    <button class="btn-secondary" style="width:100%" onclick="promptNewBase()">+ Crear nueva base</button>
   </div>
 </div>
 
@@ -495,37 +639,49 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const DB_KEY = 'inventario_productos_v1';
+const DB_KEY = 'inventario_productos_v1';        // legado (una sola base)
+const DBS_KEY = 'inventario_bases_v1';           // nuevo: todas las bases
+const ACTIVE_DB_KEY = 'inventario_base_activa_v1';
 const AUTH_KEY = 'inventario_auth_v1';
-let products = load();
+const LOC_KEY = 'inventario_mostrar_ubicacion_v1';
+
+let bases = loadBases();
+let activeDbId = loadActiveDb();
+let products = currentProducts();
 let editingId = null;
 let codeReader = null;
 let scanning = false;
 let isStaff = false;
+let currentUser = null;
+let showLocation = (localStorage.getItem(LOC_KEY) !== 'false'); // por defecto se muestra
 
-/* ---------- Auth ---------- */
-function getAuth() {
+/* ---------- Auth (múltiples usuarios) ---------- */
+function getUsers() {
   try {
-    const a = JSON.parse(localStorage.getItem(AUTH_KEY));
-    if (a && a.user) return a;
+    const data = JSON.parse(localStorage.getItem(AUTH_KEY));
+    // Formato nuevo: array de usuarios
+    if (Array.isArray(data) && data.length) return data;
+    // Compatibilidad con formato viejo {user, pass}
+    if (data && data.user) return [{ user: data.user, pass: data.pass }];
   } catch {}
-  return { user: 'admin', pass: '1234' }; // credenciales por defecto
+  return [{ user: 'admin', pass: '1234' }]; // usuario por defecto
 }
-function setAuth(user, pass) {
-  localStorage.setItem(AUTH_KEY, JSON.stringify({ user, pass }));
+function setUsers(list) {
+  localStorage.setItem(AUTH_KEY, JSON.stringify(list));
 }
 
 function toggleLock() {
   if (isStaff) {
-    // cerrar sesión
     isStaff = false;
     document.body.classList.remove('staff');
     document.getElementById('lockBtn').classList.remove('unlocked');
     document.getElementById('lockIcon').innerHTML = '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>';
     document.getElementById('modeBadge').textContent = 'Consulta';
     document.getElementById('modeBadge').classList.remove('staff');
+    selectMode = false; selected.clear();
     toast('Sesión cerrada');
     render();
+    refreshDbSelector();
   } else {
     openLogin();
   }
@@ -534,8 +690,8 @@ function toggleLock() {
 function openLogin() {
   document.getElementById('l-user').value = '';
   document.getElementById('l-pass').value = '';
-  const auth = getAuth();
-  const isDefault = auth.user === 'admin' && auth.pass === '1234';
+  const users = getUsers();
+  const isDefault = users.length === 1 && users[0].user === 'admin' && users[0].pass === '1234';
   document.getElementById('loginHint').textContent = isDefault
     ? 'Primera vez: usuario "admin", contraseña "1234". Cámbialos después de entrar.'
     : '';
@@ -546,57 +702,347 @@ function closeLogin() { document.getElementById('loginBg').classList.remove('sho
 function doLogin() {
   const u = document.getElementById('l-user').value.trim();
   const p = document.getElementById('l-pass').value;
-  const auth = getAuth();
-  if (u === auth.user && p === auth.pass) {
+  const users = getUsers();
+  const match = users.find(x => x.user === u && x.pass === p);
+  if (match) {
     isStaff = true;
+    currentUser = u;
     document.body.classList.add('staff');
     document.getElementById('lockBtn').classList.add('unlocked');
     document.getElementById('lockIcon').innerHTML = '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 7-2.6"/>';
     document.getElementById('modeBadge').textContent = 'Empleado';
     document.getElementById('modeBadge').classList.add('staff');
     closeLogin();
-    toast('Bienvenido, modo empleado activo');
+    toast('Bienvenido, ' + u, 'success');
     render();
+    refreshDbSelector();
   } else {
     toast('Usuario o contraseña incorrectos');
     if (navigator.vibrate) navigator.vibrate([60,40,60]);
   }
 }
 
-/* cambiar credenciales */
-function openCred() {
-  const auth = getAuth();
-  document.getElementById('c-user').value = auth.user;
-  document.getElementById('c-pass').value = '';
-  document.getElementById('credBg').classList.add('show');
+/* ---------- Menú hamburguesa ---------- */
+function openMenu() {
+  renderMenu();
+  document.getElementById('sideMenu').classList.add('open');
+  document.getElementById('menuOverlay').classList.add('show');
 }
-function closeCred() { document.getElementById('credBg').classList.remove('show'); }
-function saveCred() {
-  const u = document.getElementById('c-user').value.trim();
-  const p = document.getElementById('c-pass').value;
-  if (!u || !p) { toast('Completa usuario y contraseña'); return; }
-  setAuth(u, p);
-  closeCred();
-  toast('Credenciales actualizadas');
+function closeMenu() {
+  document.getElementById('sideMenu').classList.remove('open');
+  document.getElementById('menuOverlay').classList.remove('show');
 }
 
-/* ---------- DB ---------- */
-function load() {
-  try { return JSON.parse(localStorage.getItem(DB_KEY)) || []; }
-  catch { return []; }
+function renderMenu() {
+  const menuUser = document.getElementById('menuUser');
+  if (isStaff) {
+    menuUser.innerHTML = '<div class="menu-user-badge">Empleado: ' + escapeHtml(currentUser || '') + '</div>';
+  } else {
+    menuUser.innerHTML = '<div class="menu-user-badge consulta">Modo consulta</div>';
+  }
+
+  const items = [];
+  items.push({ icon: 'M3 5h18M3 12h18M3 19h18', label: 'Ver catálogo', action: 'scrollToCatalog()' });
+  items.push({ icon: 'M3 5h18v14H3zM7 9v6M10 9v6M13 9v6M16 9v6', label: 'Escanear / Buscar', action: 'scrollToTop()' });
+
+  if (isStaff) {
+    items.push({ divider: true, label: 'Administración' });
+    items.push({ icon: 'M12 5v14M5 12h14', label: 'Agregar producto', action: 'closeMenu();openModal()' });
+    items.push({ icon: 'M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2', label: 'Importar archivo', action: 'closeMenu();document.getElementById(\'fileInput\').click()' });
+    items.push({ icon: 'M4 7c0 1.66 3.58 3 8 3s8-1.34 8-3-3.58-3-8-3-8 1.34-8 3zM4 7v10c0 1.66 3.58 3 8 3s8-1.34 8-3V7M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3', label: 'Bases de datos', action: 'openBases()' });
+    items.push({ icon: showLocation ? 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0zM12 7v6M9 10h6' : 'M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z', label: showLocation ? 'Ubicación: visible' : 'Ubicación: oculta', action: 'toggleLocationDisplay()' });
+    items.push({ icon: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75', label: 'Usuarios y contraseñas', action: 'openUsers()' });
+    items.push({ icon: 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6', label: 'Gestionar / eliminar varios', action: 'closeMenu();startSelectFromMenu()' });
+    items.push({ divider: true, label: '' });
+    items.push({ icon: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9', label: 'Cerrar sesión', action: 'closeMenu();toggleLock()' });
+  } else {
+    items.push({ divider: true, label: '' });
+    items.push({ icon: 'M5 11h14M5 11a7 7 0 0 1 14 0', label: 'Acceso de empleado', action: 'closeMenu();openLogin()' });
+  }
+
+  const menuItems = document.getElementById('menuItems');
+  menuItems.innerHTML = items.map(it => {
+    if (it.divider) {
+      return it.label
+        ? '<div class="menu-divider">' + it.label + '</div>'
+        : '<div class="menu-sep"></div>';
+    }
+    return '<button class="menu-item" onclick="' + it.action + '">' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="' + it.icon + '"/></svg>' +
+      '<span>' + it.label + '</span>' +
+    '</button>';
+  }).join('');
 }
-function save() { localStorage.setItem(DB_KEY, JSON.stringify(products)); }
+
+function scrollToCatalog() {
+  closeMenu();
+  const el = document.querySelector('.section-label');
+  if (el) el.scrollIntoView({ behavior: 'smooth' });
+}
+function scrollToTop() {
+  closeMenu();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function startSelectFromMenu() {
+  if (!selectMode) toggleSelectMode();
+  const el = document.querySelector('.section-label');
+  if (el) el.scrollIntoView({ behavior: 'smooth' });
+}
+
+/* ---------- Gestión de usuarios ---------- */
+let editingUser = null; // null = nuevo, string = usuario que se edita
+
+function openUsers() {
+  closeMenu();
+  renderUsersList();
+  document.getElementById('usersBg').classList.add('show');
+}
+function closeUsers() { document.getElementById('usersBg').classList.remove('show'); }
+
+function renderUsersList() {
+  const users = getUsers();
+  const cont = document.getElementById('usersList');
+  cont.innerHTML = users.map((u, i) =>
+    '<div class="user-row">' +
+      '<div class="user-info">' +
+        '<div class="user-name">' + escapeHtml(u.user) + '</div>' +
+        '<div class="user-pass">contraseña: ' + '•'.repeat(Math.min(u.pass.length, 8)) + '</div>' +
+      '</div>' +
+      '<button class="product-edit" onclick="openUserForm(\'' + escapeHtml(u.user) + '\')" title="Editar">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>' +
+      '</button>' +
+      (users.length > 1 ?
+        '<button class="product-del" onclick="deleteUser(\'' + escapeHtml(u.user) + '\')" title="Eliminar">' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>' +
+        '</button>' : '') +
+    '</div>'
+  ).join('');
+}
+
+function openUserForm(userName) {
+  editingUser = userName || null;
+  const users = getUsers();
+  if (userName) {
+    const u = users.find(x => x.user === userName);
+    document.getElementById('userFormTitle').textContent = 'Editar usuario';
+    document.getElementById('uf-user').value = u.user;
+    document.getElementById('uf-pass').value = u.pass;
+  } else {
+    document.getElementById('userFormTitle').textContent = 'Nuevo usuario';
+    document.getElementById('uf-user').value = '';
+    document.getElementById('uf-pass').value = '';
+  }
+  document.getElementById('userFormBg').classList.add('show');
+}
+function closeUserForm() { document.getElementById('userFormBg').classList.remove('show'); editingUser = null; }
+
+function saveUser() {
+  const u = document.getElementById('uf-user').value.trim();
+  const p = document.getElementById('uf-pass').value;
+  if (!u || !p) { toast('Completa usuario y contraseña'); return; }
+  let users = getUsers();
+  // Verificar duplicados (salvo el que se edita)
+  const dup = users.find(x => x.user === u && x.user !== editingUser);
+  if (dup) { toast('Ya existe un usuario con ese nombre'); return; }
+
+  if (editingUser) {
+    const idx = users.findIndex(x => x.user === editingUser);
+    users[idx] = { user: u, pass: p };
+    if (currentUser === editingUser) currentUser = u;
+    toast('Usuario actualizado', 'success');
+  } else {
+    users.push({ user: u, pass: p });
+    toast('Usuario creado', 'success');
+  }
+  setUsers(users);
+  closeUserForm();
+  renderUsersList();
+}
+
+function deleteUser(userName) {
+  let users = getUsers();
+  if (users.length <= 1) { toast('Debe quedar al menos un usuario'); return; }
+  if (!confirm('¿Eliminar al usuario "' + userName + '"?')) return;
+  users = users.filter(x => x.user !== userName);
+  setUsers(users);
+  renderUsersList();
+  toast('Usuario eliminado', 'success');
+}
+
+/* ---------- Bases de datos (múltiples e independientes) ---------- */
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function loadBases() {
+  try {
+    const data = JSON.parse(localStorage.getItem(DBS_KEY));
+    if (Array.isArray(data) && data.length) return data;
+  } catch {}
+  // Migración: si había una base única vieja, la convertimos en la primera base
+  let legacy = [];
+  try { legacy = JSON.parse(localStorage.getItem(DB_KEY)) || []; } catch {}
+  const first = { id: uid(), name: 'Principal', products: legacy };
+  localStorage.setItem(DBS_KEY, JSON.stringify([first]));
+  return [first];
+}
+
+function saveBases() {
+  localStorage.setItem(DBS_KEY, JSON.stringify(bases));
+}
+
+function loadActiveDb() {
+  const saved = localStorage.getItem(ACTIVE_DB_KEY);
+  if (saved && bases.find(b => b.id === saved)) return saved;
+  return bases[0] ? bases[0].id : null;
+}
+
+function setActiveDb(id) {
+  activeDbId = id;
+  localStorage.setItem(ACTIVE_DB_KEY, id);
+  products = currentProducts();
+  render();
+}
+
+function activeBase() {
+  return bases.find(b => b.id === activeDbId) || bases[0];
+}
+
+function createBase(name) {
+  const nb = { id: uid(), name: name.trim() || 'Nueva base', products: [] };
+  bases.push(nb);
+  saveBases();
+  return nb;
+}
+
+function renameBase(id, name) {
+  const b = bases.find(x => x.id === id);
+  if (b) { b.name = name.trim() || b.name; saveBases(); }
+}
+
+function deleteBase(id) {
+  if (bases.length <= 1) { toast('Debe quedar al menos una base'); return false; }
+  bases = bases.filter(b => b.id !== id);
+  if (activeDbId === id) {
+    activeDbId = bases[0].id;
+    localStorage.setItem(ACTIVE_DB_KEY, activeDbId);
+  }
+  saveBases();
+  products = currentProducts();
+  return true;
+}
+
+// Poblar el <select> de bases en la barra superior
+function refreshDbSelector() {
+  const sel = document.getElementById('dbSelect');
+  if (!sel) return;
+  sel.innerHTML = bases.map(b =>
+    '<option value="' + b.id + '"' + (b.id === activeDbId ? ' selected' : '') + '>' +
+    escapeHtml(b.name) + ' (' + b.products.length + ')</option>'
+  ).join('');
+  // El botón de gestionar bases solo para empleado
+  const mng = document.getElementById('dbManageBtn');
+  if (mng) mng.style.display = isStaff ? 'flex' : 'none';
+}
+
+function onDbChange(id) {
+  setActiveDb(id);
+  refreshDbSelector();
+  toast('Base activa: ' + activeBase().name);
+}
+
+/* ---------- Modal de gestión de bases ---------- */
+function openBases() {
+  if (!isStaff) { toast('Solo el empleado puede gestionar bases'); return; }
+  closeMenu();
+  renderBasesList();
+  document.getElementById('basesBg').classList.add('show');
+}
+function closeBases() { document.getElementById('basesBg').classList.remove('show'); }
+
+function renderBasesList() {
+  const cont = document.getElementById('basesList');
+  cont.innerHTML = bases.map(b =>
+    '<div class="user-row">' +
+      '<div class="user-info">' +
+        '<div class="user-name">' + escapeHtml(b.name) + (b.id === activeDbId ? ' <span style="color:var(--green);font-size:12px">(activa)</span>' : '') + '</div>' +
+        '<div class="user-meta">' + b.products.length + ' producto' + (b.products.length === 1 ? '' : 's') + '</div>' +
+      '</div>' +
+      (b.id !== activeDbId ? '<button class="product-edit" onclick="switchBase(\'' + b.id + '\')" title="Usar esta base"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></button>' : '') +
+      '<button class="product-edit" onclick="promptRenameBase(\'' + b.id + '\')" title="Renombrar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button>' +
+      '<button class="product-del" onclick="promptDeleteBase(\'' + b.id + '\')" title="Eliminar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>' +
+    '</div>'
+  ).join('');
+}
+
+function switchBase(id) {
+  setActiveDb(id);
+  refreshDbSelector();
+  renderBasesList();
+  toast('Base activa: ' + activeBase().name, 'success');
+}
+function promptRenameBase(id) {
+  const b = bases.find(x => x.id === id);
+  const name = prompt('Nuevo nombre para la base:', b ? b.name : '');
+  if (name && name.trim()) {
+    renameBase(id, name);
+    refreshDbSelector();
+    renderBasesList();
+    toast('Base renombrada', 'success');
+  }
+}
+function promptDeleteBase(id) {
+  const b = bases.find(x => x.id === id);
+  if (!b) return;
+  if (!confirm('¿Eliminar la base "' + b.name + '" y todos sus productos? Esto no se puede deshacer.')) return;
+  if (deleteBase(id)) {
+    refreshDbSelector();
+    renderBasesList();
+    render();
+    toast('Base eliminada', 'success');
+  }
+}
+function promptNewBase() {
+  const name = prompt('Nombre de la nueva base de datos:', '');
+  if (name && name.trim()) {
+    createBase(name);
+    refreshDbSelector();
+    renderBasesList();
+    toast('Base creada: ' + name.trim(), 'success');
+  }
+}
+
+/* ---------- Mostrar/ocultar ubicación ---------- */
+function toggleLocationDisplay() {
+  showLocation = !showLocation;
+  localStorage.setItem(LOC_KEY, showLocation ? 'true' : 'false');
+  render();
+  renderMenu();
+  toast(showLocation ? 'Ubicación visible' : 'Ubicación oculta', 'success');
+}
+
+// products es una referencia viva al array de la base activa
+function currentProducts() {
+  const b = activeBase();
+  return b ? b.products : [];
+}
+
+// Guardar = persistir todas las bases (products apunta a la activa)
+function save() {
+  const b = activeBase();
+  if (b) b.products = products;
+  saveBases();
+}
+
 function money(n) {
   const v = parseFloat(n);
   if (isNaN(v)) return n || '—';
   return '$' + v.toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
-function toast(msg) {
+function toast(msg, type) {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2200);
+  t.textContent = (type === 'success' ? '✓ ' : '') + msg;
+  t.className = 'toast show' + (type === 'success' ? ' success' : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
 /* ---------- Modo de escaneo (físico / cámara) ---------- */
@@ -628,73 +1074,73 @@ function setScanMode(mode) {
 }
 
 function focusScanInput() {
+  // Con captura global ya no necesitamos enfocar un input.
+  // Quitamos el foco de cualquier campo para que NO aparezca el teclado.
   const input = document.getElementById('scanInput');
-  if (scanMode === 'physical' && input) {
-    // no forzar teclado en móvil pero sí captar el lector
-    setTimeout(() => input.focus(), 50);
-  }
+  if (input) input.blur();
 }
+
+let autoResetTimer = null;
+let scanBuffer = '';
+let scanBufferTime = 0;
 
 function setupPhysicalScanner() {
-  const input = document.getElementById('scanInput');
-  if (!input) return;
+  // Captura GLOBAL de teclado: el lector "teclea" muy rápido.
+  // No usamos un input editable, así el teclado del celular nunca se abre.
+  document.addEventListener('keydown', (e) => {
+    if (scanMode !== 'physical') return;
+    // Si hay un modal abierto o el foco está en un campo de texto, no interceptar
+    const active = document.activeElement;
+    const typingField = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT');
+    const modalOpen = document.querySelector('.modal-bg.show') || document.querySelector('.side-menu.open');
+    if (typingField || modalOpen) return;
 
-  let burstTimer = null;
-  let lastKeyTime = 0;
-  let fastKeys = 0;
+    const now = Date.now();
+    // Si pasó mucho tiempo desde la última tecla, reiniciar el búfer
+    if (now - scanBufferTime > 120) scanBuffer = '';
+    scanBufferTime = now;
 
-  function processCode() {
-    const code = input.value.trim();
-    input.value = '';
-    fastKeys = 0;
-    if (code) {
-      if (navigator.vibrate) navigator.vibrate(80);
-      showResult(code);
-    }
-  }
-
-  // 1) Si el lector manda Enter o Tab al final, procesar de inmediato
-  input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault();
-      clearTimeout(burstTimer);
-      processCode();
+      if (scanBuffer.trim().length >= 1) {
+        const code = scanBuffer.trim();
+        scanBuffer = '';
+        processScannedCode(code);
+      }
       return;
     }
-    // Medir velocidad: los lectores teclean en <50ms entre caracteres
-    const now = Date.now();
-    if (now - lastKeyTime < 50) fastKeys++;
-    else fastKeys = 0;
-    lastKeyTime = now;
-  });
 
-  // 2) Respaldo sin Enter: si vino una ráfaga rápida (lector) y se detuvo,
-  //    procesar solo. La escritura humana es más lenta y NO dispara esto.
-  input.addEventListener('input', () => {
-    clearTimeout(burstTimer);
-    if (fastKeys >= 3 && input.value.trim().length >= 3) {
-      burstTimer = setTimeout(processCode, 100);
+    // Acumular solo caracteres imprimibles (números/letras del código)
+    if (e.key.length === 1) {
+      scanBuffer += e.key;
+      // Respaldo: si el lector no manda Enter, procesar tras una pausa
+      clearTimeout(scanBuffer._t);
+      const snapshot = scanBuffer;
+      setTimeout(() => {
+        // Solo si no cambió (terminó la ráfaga) y hay longitud suficiente
+        if (scanBuffer === snapshot && scanBuffer.trim().length >= 3) {
+          const code = scanBuffer.trim();
+          scanBuffer = '';
+          processScannedCode(code);
+        }
+      }, 130);
     }
-  });
-
-  // Mantener el foco en el campo en modo físico (para que el lector escriba ahí),
-  // salvo que el usuario esté tecleando en otro campo o en un modal.
-  document.addEventListener('click', (e) => {
-    if (scanMode !== 'physical') return;
-    const tag = (e.target.tagName || '').toLowerCase();
-    const inModal = e.target.closest('.modal-bg');
-    const isField = tag === 'input' || tag === 'textarea' || tag === 'button';
-    if (!inModal && !isField) focusScanInput();
   });
 }
 
-// Búsqueda manual desde el campo del escáner (botón "Buscar código")
-function manualScanSearch() {
-  const input = document.getElementById('scanInput');
-  const code = input.value.trim();
-  if (!code) { toast('Escribe o escanea un código'); return; }
-  input.value = '';
+function processScannedCode(code) {
+  if (navigator.vibrate) navigator.vibrate(80);
   showResult(code);
+  updateScanFieldDisplay(code);
+}
+
+// Muestra brevemente el código leído en el campo visual (sin ser editable)
+function updateScanFieldDisplay(code) {
+  const input = document.getElementById('scanInput');
+  if (input) {
+    input.value = code;
+    setTimeout(() => { if (scanMode === 'physical') input.value = ''; }, 1500);
+  }
 }
 
 // Limpiar el buscador del catálogo
@@ -755,6 +1201,7 @@ function showResult(code) {
   const found = products.find(p => p.code === code);
   result.classList.add('show');
   document.getElementById('r-code').textContent = 'Código: ' + code;
+  const locEl = document.getElementById('r-location');
   const againBtn = scanMode === 'physical'
     ? '<button class="btn-secondary" onclick="scanAgain()">Escanear otro</button>'
     : '<button class="btn-secondary" onclick="startScan()">Escanear otro</button>';
@@ -764,6 +1211,13 @@ function showResult(code) {
     document.getElementById('r-name').textContent = found.name;
     document.getElementById('r-title').textContent = found.title || '';
     document.getElementById('r-price').textContent = money(found.price);
+    // Ubicación (solo si está activada y el producto la tiene)
+    if (showLocation && found.location) {
+      locEl.textContent = '📍 ' + found.location;
+      locEl.style.display = 'block';
+    } else {
+      locEl.style.display = 'none';
+    }
     let actions = againBtn;
     if (isStaff) {
       actions = '<button class="btn-ghost" onclick="openModal(\'' + found.id + '\')">Editar</button>' + actions;
@@ -775,6 +1229,7 @@ function showResult(code) {
     document.getElementById('r-name').textContent = 'Producto no registrado';
     document.getElementById('r-title').textContent = '';
     document.getElementById('r-price').textContent = '';
+    locEl.style.display = 'none';
     if (isStaff) {
       document.getElementById('r-actions').innerHTML =
         '<button class="btn-secondary" onclick="openModal(null, \'' + code + '\')">Agregar este producto</button>';
@@ -782,11 +1237,18 @@ function showResult(code) {
       document.getElementById('r-actions').innerHTML = againBtn;
     }
   }
-  // En modo físico, dejar el campo listo para el siguiente escaneo
-  if (scanMode === 'physical') focusScanInput();
+  // En modo físico: sin teclado, y auto-reinicio a los 10 segundos
+  if (scanMode === 'physical') {
+    focusScanInput();
+    clearTimeout(autoResetTimer);
+    autoResetTimer = setTimeout(() => {
+      result.classList.remove('show');
+    }, 10000);
+  }
 }
 
 function scanAgain() {
+  clearTimeout(autoResetTimer);
   document.getElementById('result').classList.remove('show');
   focusScanInput();
 }
@@ -802,6 +1264,7 @@ function openModal(id = null, prefillCode = '') {
     document.getElementById('f-name').value = p.name;
     document.getElementById('f-title').value = p.title || '';
     document.getElementById('f-price').value = p.price;
+    document.getElementById('f-location').value = p.location || '';
     document.getElementById('f-code').value = p.code || '';
     del.style.display = 'block';
   } else {
@@ -809,6 +1272,7 @@ function openModal(id = null, prefillCode = '') {
     document.getElementById('f-name').value = '';
     document.getElementById('f-title').value = '';
     document.getElementById('f-price').value = '';
+    document.getElementById('f-location').value = '';
     document.getElementById('f-code').value = prefillCode;
     del.style.display = 'none';
   }
@@ -823,6 +1287,7 @@ function saveProduct() {
   const name = document.getElementById('f-name').value.trim();
   const title = document.getElementById('f-title').value.trim();
   const price = document.getElementById('f-price').value.trim();
+  const location = document.getElementById('f-location').value.trim();
   const code = document.getElementById('f-code').value.trim();
   if (!name) { toast('Escribe un nombre'); return; }
   if (code) {
@@ -831,11 +1296,11 @@ function saveProduct() {
   }
   if (editingId) {
     const p = products.find(x => x.id === editingId);
-    p.name = name; p.title = title; p.price = price; p.code = code;
-    toast('Producto actualizado');
+    p.name = name; p.title = title; p.price = price; p.location = location; p.code = code;
+    toast('Producto actualizado', 'success');
   } else {
-    products.push({ id: uid(), name, title, price, code });
-    toast('Producto agregado');
+    products.push({ id: uid(), name, title, price, location, code });
+    toast('Producto agregado', 'success');
   }
   save(); render(); closeModal();
   document.getElementById('result').classList.remove('show');
@@ -845,7 +1310,7 @@ function deleteProduct() {
   if (!confirm('¿Eliminar este producto del inventario?')) return;
   products = products.filter(p => p.id !== editingId);
   save(); render(); closeModal();
-  toast('Producto eliminado');
+  toast('Producto eliminado', 'success');
 }
 
 /* ---------- Render ---------- */
@@ -882,7 +1347,7 @@ function quickDelete(id) {
   products = products.filter(x => x.id !== id);
   save();
   render();
-  toast('Producto eliminado');
+  toast('Producto eliminado', 'success');
 }
 
 // Borrado de varios productos seleccionados
@@ -894,14 +1359,15 @@ function deleteSelected() {
   selected.clear();
   selectMode = false;
   render();
-  toast('Productos eliminados');
+  toast('Productos eliminados', 'success');
 }
 
 function render() {
   const list = document.getElementById('list');
   const rawQ = document.getElementById('search').value.trim();
   const q = normalize(rawQ);
-  document.getElementById('count').textContent = products.length;
+  const countEl = document.getElementById('count');
+  if (countEl) countEl.textContent = products.length;
 
   let items = products;
   if (q) {
@@ -989,6 +1455,7 @@ function render() {
       '<div class="product-info">' +
         '<div class="product-name">' + escapeHtml(p.name) + '</div>' +
         (p.title ? '<div class="product-title">' + escapeHtml(p.title) + '</div>' : '') +
+        (showLocation && p.location ? '<div class="product-location">📍 ' + escapeHtml(p.location) + '</div>' : '') +
         (p.code ? '<div class="product-code">' + escapeHtml(p.code) + '</div>' : '') +
       '</div>' +
       '<div class="product-price">' + money(p.price) + '</div>' +
@@ -1063,21 +1530,22 @@ function splitLine(line, sep) {
 function parseRows(rows) {
   if (!rows || rows.length === 0) { toast('El archivo está vacío'); return; }
   const header = rows[0].map(c => String(c).toLowerCase().trim());
-  const keywords = ['nombre','name','titulo','título','title','precio','price','codigo','código','code','barras','barcode'];
+  const keywords = ['nombre','name','titulo','título','title','precio','price','codigo','código','code','barras','barcode','ubicacion','ubicación','location','librero'];
   const hasHeader = header.some(h => keywords.includes(h));
 
-  let col = { name: 0, title: 1, price: 2, code: 3 };
+  let col = { name: 0, title: 1, price: 2, location: -1, code: 3 };
   let dataRows = rows;
   if (hasHeader) {
-    col = { name: -1, title: -1, price: -1, code: -1 };
+    col = { name: -1, title: -1, price: -1, location: -1, code: -1 };
     header.forEach((h, i) => {
       if (['nombre','name'].includes(h)) col.name = i;
       else if (['titulo','título','title','descripcion','descripción'].includes(h)) col.title = i;
       else if (['precio','price'].includes(h)) col.price = i;
+      else if (['ubicacion','ubicación','location','librero'].includes(h)) col.location = i;
       else if (['codigo','código','code','barras','barcode'].includes(h)) col.code = i;
     });
     dataRows = rows.slice(1);
-    if (col.name === -1) col = { name: 0, title: 1, price: 2, code: 3 };
+    if (col.name === -1) col = { name: 0, title: 1, price: 2, location: -1, code: 3 };
   }
 
   const parsed = [];
@@ -1086,8 +1554,9 @@ function parseRows(rows) {
     if (!name) return;
     const title = col.title >= 0 && r[col.title] !== undefined ? String(r[col.title]).trim() : '';
     const price = col.price >= 0 && r[col.price] !== undefined ? String(r[col.price]).trim() : '';
+    const location = col.location >= 0 && r[col.location] !== undefined ? String(r[col.location]).trim() : '';
     const code = col.code >= 0 && r[col.code] !== undefined ? String(r[col.code]).trim() : '';
-    parsed.push({ name, title, price, code });
+    parsed.push({ name, title, price, location, code });
   });
 
   if (parsed.length === 0) { toast('No se encontraron productos válidos'); return; }
@@ -1133,18 +1602,20 @@ function confirmImport() {
         existing.name = p.name;
         if (p.title) existing.title = p.title;
         if (p.price) existing.price = p.price;
+        if (p.location) existing.location = p.location;
         updated++;
       } else skipped++;
     } else {
-      products.push({ id: uid(), name: p.name, title: p.title, price: p.price, code: p.code });
+      products.push({ id: uid(), name: p.name, title: p.title, price: p.price, location: p.location || '', code: p.code });
       added++;
     }
   });
   save(); render(); closeImport();
-  toast(added + ' agregados, ' + updated + ' actualizados' + (skipped ? ', ' + skipped + ' omitidos' : ''));
+  toast(added + ' agregados, ' + updated + ' actualizados' + (skipped ? ', ' + skipped + ' omitidos' : ''), 'success');
 }
 
 render();
+refreshDbSelector();
 setupPhysicalScanner();
 setScanMode('physical');
 
