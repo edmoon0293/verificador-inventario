@@ -197,6 +197,18 @@
   .btn-lock { background: var(--lock); color: #fff; }
 
   .search-bar { display: flex; gap: 8px; margin-bottom: 14px; }
+  .search-btn {
+    flex: none;
+    width: 48px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--accent);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .search-btn.clear { background: #fff; color: var(--muted); }
   .search-bar input {
     flex: 1; padding: 13px 16px; border: 1px solid var(--line);
     border-radius: 12px; font-size: 15px; font-family: inherit; background: #fff;
@@ -295,8 +307,9 @@
       <div class="physical-box">
         <div class="physical-dot" id="physicalDot"></div>
         <input type="text" id="scanInput" autocomplete="off" autocorrect="off" autocapitalize="off"
-               placeholder="Esperando escaneo…" inputmode="none">
-        <span class="physical-hint">Escanea un código con tu lector</span>
+               placeholder="Escanea o escribe un código…">
+        <button class="btn-secondary" style="width:100%;flex:none" onclick="manualScanSearch()">Buscar código</button>
+        <span class="physical-hint">Escanea con tu lector, o escribe y pulsa Buscar</span>
       </div>
     </div>
 
@@ -329,7 +342,18 @@
 
   <div class="section-label">Catálogo</div>
   <div class="search-bar">
-    <input type="text" id="search" placeholder="Buscar por nombre o código…" oninput="render()">
+    <input type="text" id="search" placeholder="Buscar por nombre o código…" oninput="render()"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();render();}">
+    <button class="search-btn" onclick="render()" title="Buscar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>
+      </svg>
+    </button>
+    <button class="search-btn clear" onclick="clearSearch()" title="Limpiar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M18 6L6 18M6 6l12 12"/>
+      </svg>
+    </button>
   </div>
   <div id="list"></div>
 </div>
@@ -554,21 +578,46 @@ function setupPhysicalScanner() {
   const input = document.getElementById('scanInput');
   if (!input) return;
 
-  // Al presionar Enter (el lector lo manda al final), procesar el código
+  let burstTimer = null;
+  let lastKeyTime = 0;
+  let fastKeys = 0;
+
+  function processCode() {
+    const code = input.value.trim();
+    input.value = '';
+    fastKeys = 0;
+    if (code) {
+      if (navigator.vibrate) navigator.vibrate(80);
+      showResult(code);
+    }
+  }
+
+  // 1) Si el lector manda Enter o Tab al final, procesar de inmediato
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' || e.key === 'Tab') {
       e.preventDefault();
-      const code = input.value.trim();
-      input.value = '';
-      if (code) {
-        if (navigator.vibrate) navigator.vibrate(80);
-        showResult(code);
-      }
+      clearTimeout(burstTimer);
+      processCode();
+      return;
+    }
+    // Medir velocidad: los lectores teclean en <50ms entre caracteres
+    const now = Date.now();
+    if (now - lastKeyTime < 50) fastKeys++;
+    else fastKeys = 0;
+    lastKeyTime = now;
+  });
+
+  // 2) Respaldo sin Enter: si vino una ráfaga rápida (lector) y se detuvo,
+  //    procesar solo. La escritura humana es más lenta y NO dispara esto.
+  input.addEventListener('input', () => {
+    clearTimeout(burstTimer);
+    if (fastKeys >= 3 && input.value.trim().length >= 3) {
+      burstTimer = setTimeout(processCode, 100);
     }
   });
 
-  // Mantener el foco en el campo mientras estamos en modo físico,
-  // salvo que el usuario esté escribiendo en otro campo (buscador, modales).
+  // Mantener el foco en el campo en modo físico (para que el lector escriba ahí),
+  // salvo que el usuario esté tecleando en otro campo o en un modal.
   document.addEventListener('click', (e) => {
     if (scanMode !== 'physical') return;
     const tag = (e.target.tagName || '').toLowerCase();
@@ -576,6 +625,21 @@ function setupPhysicalScanner() {
     const isField = tag === 'input' || tag === 'textarea' || tag === 'button';
     if (!inModal && !isField) focusScanInput();
   });
+}
+
+// Búsqueda manual desde el campo del escáner (botón "Buscar código")
+function manualScanSearch() {
+  const input = document.getElementById('scanInput');
+  const code = input.value.trim();
+  if (!code) { toast('Escribe o escanea un código'); return; }
+  input.value = '';
+  showResult(code);
+}
+
+// Limpiar el buscador del catálogo
+function clearSearch() {
+  document.getElementById('search').value = '';
+  render();
 }
 
 /* ---------- Scanner (cámara) ---------- */
