@@ -254,6 +254,28 @@
   /* Campo de escáner readonly (sin teclado) */
   #scanInput[readonly] { cursor: default; caret-color: transparent; }
   .product-price { font-size: 18px; font-weight: 800; white-space: nowrap; }
+  /* Precio con descuento: tachado + badge + nuevo precio */
+  .price-discount { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .price-old { font-size: 12px; color: var(--muted); text-decoration: line-through; font-weight: 600; }
+  .price-new { font-size: 18px; font-weight: 800; color: var(--accent); }
+  .price-badge {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    background: var(--accent); color: #fff; padding: 1px 6px; border-radius: 6px;
+  }
+  .result-price .price-discount { align-items: flex-start; }
+  .result-price .price-old { font-size: 16px; }
+  .result-price .price-new { font-size: 28px; }
+  .discount-box {
+    background: #fdf2f4; border: 1px solid #f3d6dc; border-radius: 12px;
+    padding: 14px; margin-bottom: 14px;
+  }
+  .discount-toggle {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; font-weight: 600; color: var(--ink);
+  }
+  .discount-toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+  #discFields { margin-top: 12px; }
+  #discFields .field:last-of-type { margin-bottom: 0; }
   .product-edit {
     background: var(--paper); border: 1px solid var(--line);
     width: 38px; height: 38px; border-radius: 10px;
@@ -285,6 +307,12 @@
     color: var(--ink);
   }
   .manage-btn.danger { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .manage-btn.discount { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .manage-btn:disabled { opacity: 0.4; }
+  .field select {
+    width: 100%; padding: 14px 16px; border: 1px solid var(--line);
+    border-radius: 12px; font-size: 15px; font-family: inherit; background: #fff; color: var(--ink);
+  }
   .empty { text-align: center; color: var(--muted); padding: 40px 20px; font-size: 14px; }
 
   .modal-bg {
@@ -536,6 +564,22 @@
     <div class="field"><label>Precio</label><input type="text" id="f-price" inputmode="decimal" placeholder="Ej. 349"></div>
     <div class="field"><label>Ubicación en librero <span style="color:var(--muted);font-weight:400">(opcional)</span></label><input type="text" id="f-location" placeholder="Ej. Pasillo 3, estante B"></div>
     <div class="field"><label>Código de barras</label><input type="text" id="f-code" inputmode="numeric" placeholder="Escanea o escribe el código"></div>
+
+    <div class="discount-box">
+      <label class="discount-toggle">
+        <input type="checkbox" id="f-disc-on" onchange="toggleDiscountFields()">
+        <span>Aplicar descuento a este producto</span>
+      </label>
+      <div id="discFields" style="display:none">
+        <div class="field"><label>Porcentaje de descuento</label><input type="text" id="f-disc-pct" inputmode="numeric" placeholder="Ej. 20"></div>
+        <div style="display:flex;gap:10px">
+          <div class="field" style="flex:1"><label>Desde</label><input type="date" id="f-disc-start"></div>
+          <div class="field" style="flex:1"><label>Hasta</label><input type="date" id="f-disc-end"></div>
+        </div>
+        <div class="sub" id="discPreview" style="margin-top:-6px"></div>
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn-ghost" id="deleteBtn" style="display:none" onclick="deleteProduct()">Eliminar</button>
       <button class="btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -609,6 +653,39 @@
     <div class="sub">Cada base es independiente y tiene sus propios productos.</div>
     <div id="basesList" style="margin-bottom:14px"></div>
     <button class="btn-secondary" style="width:100%" onclick="promptNewBase()">+ Crear nueva base</button>
+  </div>
+</div>
+
+<!-- Modal descuento masivo -->
+<div class="modal-bg" id="bulkDiscBg">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Aplicar descuento</h2>
+      <button class="modal-close" onclick="closeBulkDiscount()" aria-label="Cerrar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="sub" id="bulkDiscScope"></div>
+
+    <div class="field">
+      <label>Aplicar a</label>
+      <select id="bulk-target" onchange="renderBulkScopeText()">
+        <option value="current">Estos productos (vista actual)</option>
+        <option value="all">Todo el catálogo de esta base</option>
+      </select>
+    </div>
+
+    <div class="field"><label>Porcentaje de descuento</label><input type="text" id="bulk-pct" inputmode="numeric" placeholder="Ej. 20"></div>
+    <div style="display:flex;gap:10px">
+      <div class="field" style="flex:1"><label>Desde</label><input type="date" id="bulk-start"></div>
+      <div class="field" style="flex:1"><label>Hasta</label><input type="date" id="bulk-end"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeBulkDiscount()">Cancelar</button>
+      <button class="btn-ghost" onclick="removeBulkDiscount()" style="color:var(--accent)">Quitar descuento</button>
+      <button class="btn-secondary" onclick="applyBulkDiscount()">Aplicar</button>
+    </div>
   </div>
 </div>
 
@@ -1037,6 +1114,45 @@ function money(n) {
   if (isNaN(v)) return n || '—';
   return '$' + v.toLocaleString('es-MX', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 }
+
+/* ---------- Descuentos ---------- */
+// Convierte 'YYYY-MM-DD' a Date a medianoche local; null si vacío
+function toDate(s) { return s ? new Date(s + 'T00:00:00') : null; }
+
+// ¿El descuento de este producto está vigente hoy?
+function discountActive(p) {
+  if (!p.discount || !p.discount.percent) return false;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const start = toDate(p.discount.start);
+  const end = toDate(p.discount.end);
+  if (start && today < start) return false;
+  if (end && today > end) return false;
+  return true;
+}
+
+// Precio final con descuento aplicado (si está vigente), si no, el normal
+function finalPrice(p) {
+  const base = parseFloat(p.price) || 0;
+  if (discountActive(p)) {
+    const pct = parseFloat(p.discount.percent) || 0;
+    return base * (1 - pct / 100);
+  }
+  return base;
+}
+
+// HTML del precio: tachado + promo, o normal si no hay descuento vigente
+function priceHtml(p, sizeClass) {
+  if (discountActive(p)) {
+    const pct = parseFloat(p.discount.percent) || 0;
+    return '<div class="price-discount ' + (sizeClass||'') + '">' +
+      '<span class="price-old">' + money(p.price) + '</span>' +
+      '<span class="price-badge">-' + pct + '%</span>' +
+      '<span class="price-new">' + money(finalPrice(p)) + '</span>' +
+    '</div>';
+  }
+  return '<span class="' + (sizeClass||'') + '">' + money(p.price) + '</span>';
+}
+
 function toast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = (type === 'success' ? '✓ ' : '') + msg;
@@ -1210,7 +1326,7 @@ function showResult(code) {
     document.getElementById('r-status').textContent = '✓ Producto encontrado';
     document.getElementById('r-name').textContent = found.name;
     document.getElementById('r-title').textContent = found.title || '';
-    document.getElementById('r-price').textContent = money(found.price);
+    document.getElementById('r-price').innerHTML = priceHtml(found);
     // Ubicación (solo si está activada y el producto la tiene)
     if (showLocation && found.location) {
       locEl.textContent = '📍 ' + found.location;
@@ -1266,6 +1382,11 @@ function openModal(id = null, prefillCode = '') {
     document.getElementById('f-price').value = p.price;
     document.getElementById('f-location').value = p.location || '';
     document.getElementById('f-code').value = p.code || '';
+    const hasDisc = !!(p.discount && p.discount.percent);
+    document.getElementById('f-disc-on').checked = hasDisc;
+    document.getElementById('f-disc-pct').value = hasDisc ? p.discount.percent : '';
+    document.getElementById('f-disc-start').value = hasDisc ? (p.discount.start || '') : '';
+    document.getElementById('f-disc-end').value = hasDisc ? (p.discount.end || '') : '';
     del.style.display = 'block';
   } else {
     document.getElementById('modalTitle').textContent = 'Nuevo producto';
@@ -1274,14 +1395,25 @@ function openModal(id = null, prefillCode = '') {
     document.getElementById('f-price').value = '';
     document.getElementById('f-location').value = '';
     document.getElementById('f-code').value = prefillCode;
+    document.getElementById('f-disc-on').checked = false;
+    document.getElementById('f-disc-pct').value = '';
+    document.getElementById('f-disc-start').value = '';
+    document.getElementById('f-disc-end').value = '';
     del.style.display = 'none';
   }
+  toggleDiscountFields();
   document.getElementById('modalBg').classList.add('show');
 }
 function closeModal() {
   document.getElementById('modalBg').classList.remove('show');
   editingId = null;
 }
+
+function toggleDiscountFields() {
+  const on = document.getElementById('f-disc-on').checked;
+  document.getElementById('discFields').style.display = on ? 'block' : 'none';
+}
+
 function saveProduct() {
   if (!isStaff) return;
   const name = document.getElementById('f-name').value.trim();
@@ -1294,12 +1426,26 @@ function saveProduct() {
     const dup = products.find(p => p.code === code && p.id !== editingId);
     if (dup) { toast('Ese código ya lo usa: ' + dup.name); return; }
   }
+
+  // Descuento individual
+  let discount = null;
+  if (document.getElementById('f-disc-on').checked) {
+    const pct = parseFloat(document.getElementById('f-disc-pct').value);
+    if (!pct || pct <= 0 || pct >= 100) { toast('El porcentaje debe ser entre 1 y 99'); return; }
+    discount = {
+      percent: pct,
+      start: document.getElementById('f-disc-start').value || '',
+      end: document.getElementById('f-disc-end').value || ''
+    };
+  }
+
   if (editingId) {
     const p = products.find(x => x.id === editingId);
     p.name = name; p.title = title; p.price = price; p.location = location; p.code = code;
+    p.discount = discount;
     toast('Producto actualizado', 'success');
   } else {
-    products.push({ id: uid(), name, title, price, location, code });
+    products.push({ id: uid(), name, title, price, location, code, discount });
     toast('Producto agregado', 'success');
   }
   save(); render(); closeModal();
@@ -1325,6 +1471,7 @@ function normalize(s) {
 /* ---------- Gestión: selección múltiple y borrado ---------- */
 let selectMode = false;
 let selected = new Set();
+let lastFilteredIds = []; // ids mostrados tras el último filtro/búsqueda
 
 function toggleSelectMode() {
   selectMode = !selectMode;
@@ -1360,6 +1507,68 @@ function deleteSelected() {
   selectMode = false;
   render();
   toast('Productos eliminados', 'success');
+}
+
+/* ---------- Descuento masivo ---------- */
+let bulkScopeMode = 'filtered'; // 'filtered' (vista actual) | 'selected'
+
+function openBulkDiscount(mode) {
+  if (!isStaff) return;
+  bulkScopeMode = mode; // 'filtered' = vino del botón general; 'selected' = vino con selección
+  if (mode === 'selected' && selected.size === 0) { toast('Selecciona al menos un producto'); return; }
+  document.getElementById('bulk-target').value = 'current';
+  document.getElementById('bulk-pct').value = '';
+  document.getElementById('bulk-start').value = '';
+  document.getElementById('bulk-end').value = '';
+  renderBulkScopeText();
+  document.getElementById('bulkDiscBg').classList.add('show');
+}
+function closeBulkDiscount() {
+  document.getElementById('bulkDiscBg').classList.remove('show');
+}
+
+function bulkScopeIds() {
+  const target = document.getElementById('bulk-target').value;
+  if (target === 'all') return products.map(p => p.id);
+  // 'current': si venimos de selección múltiple, son los seleccionados;
+  // si no, son los que se muestran con el filtro/búsqueda actual.
+  if (bulkScopeMode === 'selected') return Array.from(selected);
+  return lastFilteredIds.slice();
+}
+
+function renderBulkScopeText() {
+  const ids = bulkScopeIds();
+  document.getElementById('bulkDiscScope').textContent =
+    'Se aplicará a ' + ids.length + ' producto' + (ids.length === 1 ? '' : 's') + '.';
+}
+
+function applyBulkDiscount() {
+  const pct = parseFloat(document.getElementById('bulk-pct').value);
+  if (!pct || pct <= 0 || pct >= 100) { toast('El porcentaje debe ser entre 1 y 99'); return; }
+  const start = document.getElementById('bulk-start').value || '';
+  const end = document.getElementById('bulk-end').value || '';
+  const ids = new Set(bulkScopeIds());
+  if (ids.size === 0) { toast('No hay productos en este alcance'); return; }
+  products.forEach(p => {
+    if (ids.has(p.id)) p.discount = { percent: pct, start, end };
+  });
+  save();
+  selectMode = false; selected.clear();
+  render();
+  closeBulkDiscount();
+  toast('Descuento aplicado a ' + ids.size + ' producto(s)', 'success');
+}
+
+function removeBulkDiscount() {
+  const ids = new Set(bulkScopeIds());
+  if (ids.size === 0) { toast('No hay productos en este alcance'); return; }
+  if (!confirm('¿Quitar el descuento de ' + ids.size + ' producto(s)?')) return;
+  products.forEach(p => { if (ids.has(p.id)) p.discount = null; });
+  save();
+  selectMode = false; selected.clear();
+  render();
+  closeBulkDiscount();
+  toast('Descuento quitado', 'success');
 }
 
 function render() {
@@ -1411,25 +1620,30 @@ function render() {
   }
 
   // Encabezado con la cantidad de resultados cuando hay búsqueda
+  lastFilteredIds = items.map(p => p.id);
   let resultHeader = '';
   if (q) {
     resultHeader = '<div style="font-size:13px;color:var(--muted);margin:0 4px 10px">' +
       items.length + (items.length === 1 ? ' resultado' : ' resultados') + ' para "' + escapeHtml(rawQ) + '"</div>';
   }
 
-  // Barra de gestión (solo empleado): activar selección múltiple
+  // Barra de gestión (solo empleado): activar selección múltiple y descuentos
   let manageBar = '';
   if (isStaff) {
     if (!selectMode) {
       manageBar = '<div class="manage-bar">' +
         '<span class="manage-count">' + items.length + ' en catálogo</span>' +
-        '<button class="manage-btn" onclick="toggleSelectMode()">Seleccionar varios</button>' +
+        '<div style="display:flex;gap:8px">' +
+          '<button class="manage-btn discount" onclick="openBulkDiscount(\'filtered\')" title="Aplicar a estos ' + items.length + '">% Descuento</button>' +
+          '<button class="manage-btn" onclick="toggleSelectMode()">Seleccionar varios</button>' +
+        '</div>' +
         '</div>';
     } else {
       manageBar = '<div class="manage-bar active">' +
         '<span class="manage-count">' + selected.size + ' seleccionado' + (selected.size === 1 ? '' : 's') + '</span>' +
-        '<div style="display:flex;gap:8px">' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">' +
           '<button class="manage-btn" onclick="toggleSelectMode()">Cancelar</button>' +
+          '<button class="manage-btn discount" onclick="openBulkDiscount(\'selected\')" ' + (selected.size===0?'disabled':'') + '>% Descuento</button>' +
           '<button class="manage-btn danger" onclick="deleteSelected()">Eliminar (' + selected.size + ')</button>' +
         '</div>' +
         '</div>';
@@ -1458,7 +1672,7 @@ function render() {
         (showLocation && p.location ? '<div class="product-location">📍 ' + escapeHtml(p.location) + '</div>' : '') +
         (p.code ? '<div class="product-code">' + escapeHtml(p.code) + '</div>' : '') +
       '</div>' +
-      '<div class="product-price">' + money(p.price) + '</div>' +
+      '<div class="product-price">' + priceHtml(p) + '</div>' +
       actions +
     '</div>';
   }).join('') + extra;
